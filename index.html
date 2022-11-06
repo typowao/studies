@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Mój pierwszy geoportal w Leaflet</title>
+        <link rel="icon" type="image/png" href="ikona.png"/>
+
+        <link rel="stylesheet" href="leaflet/leaflet.css">
+        <link rel="stylesheet" href="bootstrap-4.0.0-dist/css/bootstrap.min.css">
+        <link rel="stylesheet" type="text/css" href="style.css">
+
+      
+
+    </head>
+    <body>
+
+       
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-sm-9 col-md-7 main">
+                    <br/>
+                    <label>Warstwa</label>
+                    <select>
+                        <option value="">Wybierz</option>
+                        <option value="pusto">pusto</option>
+                    </select>
+                    <br/>
+
+                    <hr/>
+                    <h2>Legenda WMS GIOŚ</h2>
+                    <h4>zespoły przyrodniczo-krajobrazowe</h4>
+                    <img src="https://sdi.gdos.gov.pl/ows?service=WMS&request=GetLegendGraphic&format=image/png&width=20&height=20&layer=ZespolyPrzyrodniczoKrajobrazowe"/>
+                    <h4>parki krajobrazowe</h4>
+                    <img src="https://sdi.gdos.gov.pl/ows?service=WMS&request=GetLegendGraphic&format=image/png&width=20&height=20&layer=ParkiKrajobrazowe"/>
+                    <h4>parki narodowe</h4>
+                    <img src="https://sdi.gdos.gov.pl/ows?service=WMS&request=GetLegendGraphic&format=image/png&width=20&height=20&layer=ParkiNarodowe"/>
+                </div>
+
+                <div id="map" class="col-sm-3 col-md-5 sidebar">
+
+                </div>
+            </div>    
+        </div>
+
+    </body>
+    
+            <link rel="stylesheet" href="Leaflet.Control.Opacity-master/src/L.Control.Opacity.css">
+            <script src="leaflet/leaflet.js"></script>
+            <script src="http://code.jquery.com/jquery-3.5.1.js"></script>
+            <script src="optyk_udp_layer.js"></script>
+            <script src="Leaflet.Control.Opacity-master/src/L.Control.Opacity.js"></script>
+            <link rel="stylesheet" href="leafletFullscreen/Control.FullScreen.css" />
+            <script src="leafletFullscreen/Control.FullScreen.js"></script>
+            <script src="L.TileLayer.WMTS-main\leaflet.tilelayer.wmts.src.js"></script>
+
+            <script src="https://unpkg.com/proj4leaflet@1.0.2/lib/proj4-compressed.js"></script>
+            <script src="https://unpkg.com/proj4leaflet@1.0.2/src/proj4leaflet.js"></script>
+            
+            <script src="leaflet.projwmts-gh-pages\src\TileLayer.ProjWMTS.js"></script>
+
+            <script>
+
+                var mymap = L.map('map', { 
+                    fullscreenControl: true,
+                    fullscreenControlOptions: {
+                        position: 'topleft'
+                    }, 
+                    MaxZoom: 20})
+                .setView([52.15,21.05],13);
+
+                var osm=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png?{foo}', {foo: 'bar', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'})
+                osm.addTo(mymap)
+
+
+                //var popup = L.popup().setLatLng([52.02,20.19]).setContent("Samotny popup w centrum mapy").openOn(mymap);
+                //var marker = L.marker([52.03,20.19]).addTo(mymap);
+                //marker.bindPopup("Popup przypięty do markera");
+                //marker.bindTooltip("<b>tooltip</b>").openTooltip();
+
+                //console.log(geojson_points)
+                var geojson_points={
+                    "type": "FeatureCollection",
+                    "name": "my_points",
+                    "crs": {"type":"name", "properties": {"name":"urn:ogc:def:crs:OGC:1.3:CRS84"}},
+                    "features":
+                    [
+                      {"type":"Feature", "properties": {"nazwa":"dom", "liczba":1}, "geometry": {"type":"Point", "coordinates":[21.00,52.15]}},
+                      {"type":"Feature", "properties": {"nazwa":"dom dzieci", "liczba":2}, "geometry":{"type":"Point", "coordinates":[21.10,52.15]}}
+                    ]
+                }
+
+                var point_layers = L.geoJSON(geojson_points, {
+                    onEachFeature: oEF,
+                    pointToLayer: PToL
+                }).addTo(mymap);
+
+                function PToL(feature, latlng) {
+                    style = {radius: 5, opacity: 1, color: 'rgba(0,0,0,1.0)', weight: 0.8, fill: true, fillOpacity: 1, fillColor: 'red'}
+                return L.circleMarker(latlng, style);
+                }
+
+                function oEF(feature, layer) {
+                    var props = feature.properties;
+                    layer.bindTooltip(props.liczba+'<br>'+props.nazwa,
+                    {permanent: true}
+                    );
+                }
+
+                var optyk_udp_layers = L.geoJSON(optyk).addTo(mymap);
+
+                L.control.scale().addTo(mymap);
+            
+
+                //wfs
+                var url_wfs = "http://localhost:8080/geoserver/ows?service=WFS&version=1.1.0&request=GetFeature&typeNames=wfs:optykshp&srsName=EPSG:2180&bbox=476695.29,637991.98,479923.16,642694.96&maxFeatures=1&outputFormat=application/json";
+
+                async function getWFSgeojson(){
+                    try{
+                        const response = await fetch(url_wfs);
+                        return await response.json();
+                    } catch(err) {
+                        console.log(err);
+                    }
+                }
+
+                getWFSgeojson().then(data =>{
+                    console.log(data);
+                    var wfsPolylayer = L.geoJSON([data], {
+                    });
+                });
+
+
+                //WMS KIUT
+                //https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaUzbrojeniaTerenu?service=WMS&request=GetCapabilities
+                var kiut = L.tileLayer.wms('https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaUzbrojeniaTerenu', {
+                    layers: 'przewod_wodociagowy',
+                	format: 'image/png',
+                	transparent: true
+                }).addTo(mymap);
+
+                //WMS KIBDOT
+                var kibdot = L.tileLayer.wms('https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaBazDanychObiektowTopograficznych', {
+                    layers: 'wdrozenia',
+                	format: 'image/png',
+                	transparent: true
+                }).addTo(mymap);
+
+                //WMS KIBDOT
+                var kibdot_bdot = L.tileLayer.wms('https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaBazDanychObiektowTopograficznych', {
+                    layers: 'bdot',
+                	format: 'image/png',
+                	transparent: true
+                }).addTo(mymap);
+
+                //WMS KIEG
+                var kieg = L.tileLayer.wms('https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow', {
+                    layers: 'budynki',
+                	format: 'image/png',
+                	transparent: true
+                }).addTo(mymap);
+
+                //WMS GIOS
+                var gios1 = L.tileLayer.wms('https://sdi.gdos.gov.pl/ows?service=WMS', {
+                    layers: 'ZespolyPrzyrodniczoKrajobrazowe',
+                	format: 'image/png',
+                	transparent: true
+                }).addTo(mymap);
+
+                var gios2= L.tileLayer.wms('https://sdi.gdos.gov.pl/ows?service=WMS', {
+                    layers: 'ParkiKrajobrazowe',
+                	format: 'image/png',
+                	transparent: true
+                }).addTo(mymap);
+
+                var gios3= L.tileLayer.wms('https://sdi.gdos.gov.pl/ows?service=WMS', {
+                    layers: 'ParkiNarodowe',
+                	format: 'image/png',
+                	transparent: true
+                }).addTo(mymap);
+            
+                
+                var crs1 = new L.Proj.CRS(
+                    "EPSG:2180",
+                    "+proj=tmerc +lat_0=0 +lon_0=19 +k=0.9993 +x_0=500000 +y_0=-5300000 +ellps=GRS80 units=m +no_defs",
+                {});
+
+                //https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMTS/HighResolution?service=WMTS&request=getCapabilities
+                //WMTS ortofotomapa
+                var orto = L.tileLayer.projwmts('https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMTS/HighResolution', {
+                    layers: 'ORTOFOTOMAPA',
+                    format: 'image/jpeg',
+                    tileSize: 512,
+                    //version: '1.0.0',
+                    transparent: true,
+                    crs: crs1,
+                    origin: [850000.0, 100000.0],
+                    scales: [3.0238155714285716E7,1.5119077857142858E7,7559538.928571429, 3779769.4642857146, 1889884.7321428573, 944942.3660714286, 472471.1830357143, 236235.59151785716, 94494.23660714286, 47247.11830357143, 23623.559151785714, 9449.423660714287, 4724.711830357143, 1889.8847321428573, 944.9423660714286, 472.4711830357143,236.23559151785716],
+                    tilematrixSet: 'EPSG:2180',
+                    //opacity: 0.8,
+                    crossOrigin: true,
+                    minZoom: 5,
+                    maxZoom: 22,
+                    //attribution: '<a href="http://www.gugik.gov.pl/" title="GĹ‚Ăłwny UrzÄ…d Geodezji i Kartografii">GUGiK</a>',
+                });
+
+                 //WMTS ortofoto stand
+                 var isok = L.tileLayer.projwmts('https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMTS/StandardResolution', {
+                    layers: 'ORTOFOTOMAPA',
+                    format: 'image/jpeg',
+                    tileSize: 512,
+                    //version: '1.0.0',
+                    transparent: true,
+                    crs: crs1,
+                    origin: [850000.0, 100000.0],
+                    scales: [3.0238155714285716E7,1.5119077857142858E7,7559538.928571429, 3779769.4642857146, 1889884.7321428573, 944942.3660714286, 472471.1830357143, 236235.59151785716, 94494.23660714286, 47247.11830357143, 23623.559151785714, 9449.423660714287, 4724.711830357143, 1889.8847321428573, 944.9423660714286, 472.4711830357143,236.23559151785716],
+                    tilematrixSet: 'EPSG:2180',
+                    //opacity: 0.8,
+                    crossOrigin: true,
+                    minZoom: 5,
+                    maxZoom: 22,
+                    //attribution: '<a href="http://www.gugik.gov.pl/" title="GĹ‚Ăłwny UrzÄ…d Geodezji i Kartografii">GUGiK</a>',
+                });
+
+                var baseLayers = {
+                    "OpenStreetMap": osm,
+
+                    "WMTS, ortofotomapa wysokorozdzielcza": orto,
+                    "WMTS, ortofotomapa standardowa": isok,
+
+                    "WMS, KIUT, przewody wodociągowe": kiut,
+                    "WMS, KIBDOT, wdrożenia": kibdot,
+                    "WMS, KIBDOT, obiekty topograficzne": kibdot_bdot,
+                    "WMS, KIEG, budynki": kieg,
+
+                    "WMS, GIOŚ, zespoły przyrodniczo-krajobrazowe": gios1,
+                    "WMS, GIOŚ, parki krajobrazowe": gios2,
+                    "WMS, GIOŚ, parki narodowe": gios3,
+
+                    'WMS, obszar w zasiegu spaceru': L.tileLayer.wms('http://localhost:8080/geoserver/zasieg/wms?', {
+                        layers: 'zasieg:zasieg',
+                        transparent: true
+                    }),
+                };
+
+                var overlays = {
+                   "Moje punkty": point_layers,
+                   "Optyk lub optometrysta": optyk_udp_layers
+                };
+
+                L.control.layers(baseLayers, overlays).addTo(mymap);
+                
+                //OpacityControl
+                L.control.opacity(
+                    baseLayers, {
+                      label: "Layers Opacity"
+                }).addTo(mymap);
+
+            </script>
+        </div>
+    </body>
+</html>
